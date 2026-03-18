@@ -1,1 +1,1129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LinguaVoice — Real-Time Voice Language Companion</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #060910;
+      --surface:   #0d1117;
+      --card:      #111820;
+      --border:    rgba(255,255,255,0.07);
+      --accent:    #00e5a0;
+      --accent2:   #0077ff;
+      --accent3:   #ff4d6d;
+      --text:      #e8edf5;
+      --muted:     #5a6678;
+      --glow:      0 0 40px rgba(0,229,160,0.15);
+      --radius:    18px;
+      --font-head: 'Syne', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── NOISE OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      opacity: 0.4;
+    }
+
+    /* ── AMBIENT BLOBS ── */
+    .blob {
+      position: fixed; border-radius: 50%; filter: blur(80px);
+      pointer-events: none; z-index: 0;
+      animation: float 12s ease-in-out infinite;
+    }
+    .blob-1 { width: 420px; height: 420px; background: rgba(0,229,160,0.08); top: -100px; left: -100px; }
+    .blob-2 { width: 500px; height: 500px; background: rgba(0,119,255,0.07); bottom: -150px; right: -100px; animation-delay: -5s; }
+    .blob-3 { width: 300px; height: 300px; background: rgba(255,77,109,0.06); top: 40%; left: 60%; animation-delay: -9s; }
+    @keyframes float {
+      0%,100% { transform: translateY(0) scale(1); }
+      50%      { transform: translateY(-30px) scale(1.06); }
+    }
+
+    /* ── LAYOUT ── */
+    .app {
+      position: relative; z-index: 1;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      min-height: 100vh;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 28px 0 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      display: flex; align-items: center; gap: 12px;
+      font-family: var(--font-head); font-weight: 800; font-size: 1.4rem;
+      letter-spacing: -0.03em;
+    }
+    .logo-icon {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem;
+    }
+    .logo span { color: var(--accent); }
+
+    .header-controls { display: flex; gap: 10px; align-items: center; }
+    .lang-badge {
+      display: flex; gap: 6px; align-items: center;
+      padding: 6px 14px; border-radius: 99px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      font-size: 0.82rem; font-weight: 500; color: var(--muted);
+      cursor: pointer; transition: all .2s;
+    }
+    .lang-badge:hover { border-color: var(--accent); color: var(--accent); }
+    .lang-badge.active { border-color: var(--accent); color: var(--accent); background: rgba(0,229,160,0.07); }
+
+    /* ── MAIN GRID ── */
+    main {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 20px;
+      padding: 24px 0;
+      align-items: start;
+    }
+
+    /* ── CONVERSATION PANEL ── */
+    .conversation-panel {
+      display: flex; flex-direction: column; gap: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .panel-title {
+      font-family: var(--font-head); font-weight: 700; font-size: 0.95rem;
+      letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted);
+    }
+    .session-badge {
+      font-size: 0.72rem; padding: 3px 10px; border-radius: 99px;
+      background: rgba(0,229,160,0.1); color: var(--accent);
+      font-weight: 600; letter-spacing: 0.06em;
+    }
+    .session-badge.idle { background: rgba(90,102,120,0.2); color: var(--muted); }
+
+    .messages {
+      height: 460px; overflow-y: auto;
+      padding: 20px 22px;
+      display: flex; flex-direction: column; gap: 18px;
+      scroll-behavior: smooth;
+    }
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-track { background: transparent; }
+    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .message {
+      display: flex; gap: 12px; align-items: flex-start;
+      animation: msgIn .35s cubic-bezier(.22,1,.36,1) both;
+    }
+    @keyframes msgIn {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .message.user { flex-direction: row-reverse; }
+
+    .avatar {
+      width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.85rem; font-weight: 700;
+    }
+    .avatar.ai { background: linear-gradient(135deg, var(--accent), #00b37a); color: #000; }
+    .avatar.user { background: linear-gradient(135deg, var(--accent2), #005fcc); color: #fff; }
+
+    .bubble {
+      max-width: 78%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      font-size: 0.92rem;
+      line-height: 1.6;
+      position: relative;
+    }
+    .message.ai .bubble {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-top-left-radius: 4px;
+    }
+    .message.user .bubble {
+      background: rgba(0,119,255,0.15);
+      border: 1px solid rgba(0,119,255,0.25);
+      border-top-right-radius: 4px;
+      text-align: right;
+    }
+    .bubble-meta {
+      font-size: 0.7rem; color: var(--muted);
+      margin-top: 5px;
+    }
+    .message.user .bubble-meta { text-align: right; }
+
+    /* translation chip */
+    .translation {
+      font-size: 0.8rem; color: var(--accent); font-style: italic;
+      margin-top: 6px; padding-top: 6px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── TYPING INDICATOR ── */
+    .typing { display: flex; gap: 5px; align-items: center; padding: 4px 0; }
+    .typing span {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent); display: block;
+      animation: bounce .9s ease-in-out infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: .15s; }
+    .typing span:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce {
+      0%,60%,100% { transform: translateY(0); }
+      30%          { transform: translateY(-7px); }
+    }
+
+    /* ── INPUT ROW ── */
+    .input-row {
+      padding: 16px 22px;
+      border-top: 1px solid var(--border);
+      display: flex; gap: 10px; align-items: center;
+    }
+    .text-input {
+      flex: 1; padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text); font-family: var(--font-body); font-size: 0.92rem;
+      outline: none; transition: border-color .2s;
+    }
+    .text-input:focus { border-color: rgba(0,229,160,0.4); }
+    .text-input::placeholder { color: var(--muted); }
+
+    .btn {
+      padding: 12px 18px; border-radius: 12px; border: none; cursor: pointer;
+      font-family: var(--font-head); font-weight: 700; font-size: 0.82rem;
+      letter-spacing: 0.04em;
+      transition: all .2s; display: flex; align-items: center; gap: 6px;
+    }
+    .btn-send {
+      background: linear-gradient(135deg, var(--accent), #00b37a);
+      color: #000;
+    }
+    .btn-send:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(0,229,160,0.4); }
+    .btn-send:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* ── RIGHT SIDEBAR ── */
+    .sidebar { display: flex; flex-direction: column; gap: 16px; }
+
+    /* ── ORB SECTION ── */
+    .orb-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      padding: 28px 22px 24px;
+      display: flex; flex-direction: column; align-items: center; gap: 24px;
+    }
+    .orb-wrap {
+      position: relative; width: 140px; height: 140px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .orb-rings {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      animation: spin 4s linear infinite;
+    }
+    .orb-rings::before, .orb-rings::after {
+      content: ''; position: absolute; border-radius: 50%;
+      border: 1.5px solid transparent;
+    }
+    .orb-rings::before {
+      inset: 4px;
+      border-top-color: var(--accent); border-right-color: var(--accent);
+      animation: spin 3s linear infinite;
+    }
+    .orb-rings::after {
+      inset: 14px;
+      border-bottom-color: var(--accent2); border-left-color: var(--accent2);
+      animation: spin 2s linear infinite reverse;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .orb {
+      width: 90px; height: 90px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, rgba(0,229,160,0.9), rgba(0,119,255,0.5), #060910);
+      box-shadow: 0 0 40px rgba(0,229,160,0.3), 0 0 80px rgba(0,229,160,0.1);
+      cursor: pointer;
+      transition: transform .2s, box-shadow .3s;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem;
+      position: relative; z-index: 1;
+      animation: orbPulse 3s ease-in-out infinite;
+    }
+    .orb:hover { transform: scale(1.08); box-shadow: 0 0 60px rgba(0,229,160,0.5), 0 0 100px rgba(0,229,160,0.2); }
+    .orb.listening {
+      animation: orbListen 0.8s ease-in-out infinite;
+      box-shadow: 0 0 60px rgba(0,229,160,0.6), 0 0 120px rgba(0,229,160,0.3);
+    }
+    .orb.speaking {
+      animation: orbSpeak 1s ease-in-out infinite;
+      box-shadow: 0 0 60px rgba(0,119,255,0.6), 0 0 100px rgba(0,119,255,0.3);
+      background: radial-gradient(circle at 35% 35%, rgba(0,119,255,0.9), rgba(0,229,160,0.5), #060910);
+    }
+    @keyframes orbPulse {
+      0%,100% { box-shadow: 0 0 40px rgba(0,229,160,0.3), 0 0 80px rgba(0,229,160,0.1); }
+      50%      { box-shadow: 0 0 50px rgba(0,229,160,0.45), 0 0 100px rgba(0,229,160,0.15); }
+    }
+    @keyframes orbListen {
+      0%,100% { transform: scale(1); }
+      50%      { transform: scale(1.1); }
+    }
+    @keyframes orbSpeak {
+      0%,100% { transform: scale(1) rotate(0deg); }
+      25%      { transform: scale(1.04) rotate(1deg); }
+      75%      { transform: scale(1.04) rotate(-1deg); }
+    }
+
+    .orb-status {
+      text-align: center;
+    }
+    .orb-label {
+      font-family: var(--font-head); font-weight: 700; font-size: 0.95rem;
+      letter-spacing: 0.02em; margin-bottom: 4px;
+    }
+    .orb-hint { font-size: 0.78rem; color: var(--muted); }
+
+    .mic-btn {
+      width: 100%; padding: 14px;
+      background: linear-gradient(135deg, rgba(0,229,160,0.12), rgba(0,119,255,0.08));
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      color: var(--accent);
+      font-family: var(--font-head); font-weight: 700; font-size: 0.88rem;
+      cursor: pointer; transition: all .2s;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      letter-spacing: 0.04em;
+    }
+    .mic-btn:hover { background: rgba(0,229,160,0.18); box-shadow: var(--glow); }
+    .mic-btn.active {
+      background: rgba(255,77,109,0.1); border-color: var(--accent3);
+      color: var(--accent3);
+      animation: micPulse 1.5s ease-in-out infinite;
+    }
+    @keyframes micPulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(255,77,109,0.3); }
+      50%      { box-shadow: 0 0 0 10px rgba(255,77,109,0); }
+    }
+
+    /* ── WAVEFORM VISUALIZER ── */
+    .waveform-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      padding: 16px 18px;
+    }
+    .waveform-title { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; font-family: var(--font-head); font-weight: 600; }
+    canvas#waveform { width: 100%; height: 60px; display: block; }
+
+    /* ── STATS CARD ── */
+    .stats-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      padding: 18px 20px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .stat { display: flex; flex-direction: column; gap: 4px; }
+    .stat-val {
+      font-family: var(--font-head); font-size: 1.6rem; font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stat-lbl { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+
+    /* ── VOCAB CARD ── */
+    .vocab-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      padding: 18px 20px;
+    }
+    .vocab-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .vocab-title { font-family: var(--font-head); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .vocab-list { display: flex; flex-direction: column; gap: 8px; }
+    .vocab-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 12px; border-radius: 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      font-size: 0.82rem;
+    }
+    .vocab-word { font-weight: 600; color: var(--text); }
+    .vocab-trans { color: var(--muted); font-style: italic; }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 18px 0;
+      border-top: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .footer-info { font-size: 0.75rem; color: var(--muted); }
+    .footer-info strong { color: var(--accent); }
+    .api-key-row { display: flex; gap: 8px; align-items: center; }
+    .api-input {
+      padding: 7px 12px; border-radius: 9px; font-size: 0.78rem;
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); font-family: var(--font-body); outline: none;
+      width: 200px; transition: border-color .2s;
+    }
+    .api-input:focus { border-color: rgba(0,229,160,0.4); }
+    .api-input::placeholder { color: var(--muted); }
+    .btn-sm {
+      padding: 7px 14px; border-radius: 9px; border: none; cursor: pointer;
+      font-family: var(--font-head); font-size: 0.78rem; font-weight: 700;
+      background: rgba(0,229,160,0.15); color: var(--accent);
+      border: 1px solid rgba(0,229,160,0.3); transition: all .2s;
+    }
+    .btn-sm:hover { background: rgba(0,229,160,0.25); }
+
+    /* ── CONFIG MODAL ── */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(6,9,16,0.85); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center;
+      animation: fadeIn .2s ease;
+    }
+    @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+    .modal {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 22px; padding: 36px;
+      width: min(500px, 90vw);
+      animation: slideUp .3s cubic-bezier(.22,1,.36,1);
+    }
+    @keyframes slideUp {
+      from { transform: translateY(30px); opacity: 0; }
+      to   { transform: translateY(0); opacity: 1; }
+    }
+    .modal h2 { font-family: var(--font-head); font-size: 1.3rem; font-weight: 800; margin-bottom: 6px; }
+    .modal p { color: var(--muted); font-size: 0.88rem; margin-bottom: 24px; line-height: 1.6; }
+    .form-group { margin-bottom: 18px; }
+    .form-label { font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; display: block; margin-bottom: 7px; }
+    .form-input, .form-select {
+      width: 100%; padding: 12px 14px; border-radius: 11px;
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); font-family: var(--font-body); font-size: 0.92rem;
+      outline: none; transition: border-color .2s;
+    }
+    .form-input:focus, .form-select:focus { border-color: rgba(0,229,160,0.4); }
+    .form-select option { background: var(--surface); }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+    .btn-modal-cancel { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 12px 20px; border-radius: 11px; cursor: pointer; font-family: var(--font-head); font-size: 0.88rem; font-weight: 700; transition: all .2s; }
+    .btn-modal-cancel:hover { border-color: var(--text); color: var(--text); }
+    .btn-modal-save { background: linear-gradient(135deg, var(--accent), #00b37a); color: #000; border: none; padding: 12px 24px; border-radius: 11px; cursor: pointer; font-family: var(--font-head); font-size: 0.88rem; font-weight: 800; transition: all .2s; }
+    .btn-modal-save:hover { transform: scale(1.03); box-shadow: 0 0 20px rgba(0,229,160,0.4); }
+
+    .hidden { display: none !important; }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+      background: var(--card); border: 1px solid var(--border);
+      padding: 12px 22px; border-radius: 99px;
+      font-size: 0.85rem; font-weight: 500;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+      z-index: 200; animation: toastIn .3s ease;
+      white-space: nowrap;
+    }
+    .toast.success { border-color: rgba(0,229,160,0.4); color: var(--accent); }
+    .toast.error   { border-color: rgba(255,77,109,0.4); color: var(--accent3); }
+    @keyframes toastIn { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      main { grid-template-columns: 1fr; }
+      .sidebar { flex-direction: row; flex-wrap: wrap; }
+      .orb-card { flex: 1 1 100%; }
+      .stats-card, .waveform-card, .vocab-card { flex: 1 1 45%; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Ambient -->
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+
+  <!-- Config Modal -->
+  <div class="modal-overlay" id="configModal">
+    <div class="modal">
+      <h2>⚡ Setup LinguaVoice</h2>
+      <p>Enter your Murf Falcon API key and choose your language learning preferences to get started.</p>
+      <div class="form-group">
+        <label class="form-label" for="murfApiKey">Murf Falcon API Key</label>
+        <input class="form-input" id="murfApiKey" type="password" placeholder="sk-..." />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="targetLang">Language to Learn</label>
+        <select class="form-select" id="targetLang">
+          <option value="Spanish">🇪🇸 Spanish</option>
+          <option value="French">🇫🇷 French</option>
+          <option value="Japanese">🇯🇵 Japanese</option>
+          <option value="German">🇩🇪 German</option>
+          <option value="Mandarin">🇨🇳 Mandarin Chinese</option>
+          <option value="Italian">🇮🇹 Italian</option>
+          <option value="Portuguese">🇧🇷 Portuguese</option>
+          <option value="Hindi">🇮🇳 Hindi</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="voiceId">Tutor Voice</label>
+        <select class="form-select" id="voiceId">
+          <option value="en-US-natalie">Natalie (US English, Warm)</option>
+          <option value="en-US-marcus">Marcus (US English, Deep)</option>
+          <option value="en-UK-hazel">Hazel (UK English, Clear)</option>
+          <option value="en-US-ken">Ken (US English, Friendly)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="proficiency">Proficiency Level</label>
+        <select class="form-select" id="proficiency">
+          <option value="beginner">Beginner</option>
+          <option value="intermediate" selected>Intermediate</option>
+          <option value="advanced">Advanced</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="skipSetup()">Demo Mode</button>
+        <button class="btn-modal-save" onclick="saveConfig()">Start Learning →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Shell -->
+  <div class="app">
+    <header>
+      <div class="logo">
+        <div class="logo-icon">🎙️</div>
+        Lingua<span>Voice</span>
+      </div>
+      <div class="header-controls">
+        <div class="lang-badge active" id="langBadge" onclick="document.getElementById('configModal').classList.remove('hidden')">
+          🌍 <span id="langLabel">Spanish</span>
+        </div>
+        <div class="lang-badge" id="levelBadge">📊 Intermediate</div>
+        <div class="lang-badge" onclick="document.getElementById('configModal').classList.remove('hidden')">⚙️ Settings</div>
+      </div>
+    </header>
+
+    <main>
+      <!-- Left: Conversation -->
+      <div class="conversation-panel">
+        <div class="panel-header">
+          <span class="panel-title">Conversation</span>
+          <span class="session-badge idle" id="sessionBadge">IDLE</span>
+        </div>
+
+        <div class="messages" id="messages">
+          <!-- Welcome message injected by JS -->
+        </div>
+
+        <div class="input-row">
+          <input class="text-input" id="userInput" type="text"
+            placeholder="Type a message or use the mic…"
+            onkeydown="if(event.key==='Enter') sendMessage()" />
+          <button class="btn btn-send" id="sendBtn" onclick="sendMessage()">
+            ↑ Send
+          </button>
+        </div>
+      </div>
+
+      <!-- Right: Controls & Stats -->
+      <div class="sidebar">
+        <!-- Orb -->
+        <div class="orb-card">
+          <div class="orb-wrap">
+            <div class="orb-rings"></div>
+            <div class="orb" id="orb" onclick="toggleMic()">🎙️</div>
+          </div>
+          <div class="orb-status">
+            <div class="orb-label" id="orbLabel">Ready to Speak</div>
+            <div class="orb-hint" id="orbHint">Click orb or button to record</div>
+          </div>
+          <button class="mic-btn" id="micBtn" onclick="toggleMic()">
+            🎤 <span id="micBtnText">Hold to Speak</span>
+          </button>
+        </div>
+
+        <!-- Waveform -->
+        <div class="waveform-card">
+          <div class="waveform-title">Audio Waveform</div>
+          <canvas id="waveform"></canvas>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-card">
+          <div class="stat">
+            <div class="stat-val" id="statExchanges">0</div>
+            <div class="stat-lbl">Exchanges</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val" id="statWords">0</div>
+            <div class="stat-lbl">Words Heard</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val" id="statStreak">0</div>
+            <div class="stat-lbl">Streak 🔥</div>
+          </div>
+          <div class="stat">
+            <div class="stat-val" id="statTime">0m</div>
+            <div class="stat-lbl">Session</div>
+          </div>
+        </div>
+
+        <!-- Vocab learned -->
+        <div class="vocab-card">
+          <div class="vocab-header">
+            <span class="vocab-title">Vocab Learned</span>
+            <span style="font-size:0.72rem;color:var(--muted)" id="vocabCount">0 words</span>
+          </div>
+          <div class="vocab-list" id="vocabList">
+            <div style="font-size:0.8rem;color:var(--muted);text-align:center;padding:10px">
+              Start a conversation to learn words!
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <div class="footer-info">
+        Powered by <strong>Murf Falcon TTS</strong> &amp; <strong>Claude AI</strong> · Real-Time Voice Learning
+      </div>
+      <div class="api-key-row">
+        <span style="font-size:0.75rem;color:var(--muted)">Murf API:</span>
+        <input class="api-input" id="quickApiKey" type="password" placeholder="Paste key here…" />
+        <button class="btn-sm" onclick="saveQuickKey()">Save</button>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════
+    //  STATE
+    // ══════════════════════════════════════════════════════════════
+    const state = {
+      murfApiKey: '',
+      claudeAvailable: true,
+      targetLang: 'Spanish',
+      voiceId: 'en-US-natalie',
+      proficiency: 'intermediate',
+      isListening: false,
+      isSpeaking: false,
+      exchanges: 0,
+      wordsHeard: 0,
+      streak: 0,
+      sessionStart: Date.now(),
+      vocab: [],
+      history: [],           // {role, content}
+      recognition: null,
+      audioContext: null,
+      analyser: null,
+      waveAnimFrame: null,
+      mediaStream: null,
+    };
+
+    // ══════════════════════════════════════════════════════════════
+    //  SETUP & CONFIG
+    // ══════════════════════════════════════════════════════════════
+    function saveConfig() {
+      const key  = document.getElementById('murfApiKey').value.trim();
+      const lang = document.getElementById('targetLang').value;
+      const vid  = document.getElementById('voiceId').value;
+      const prof = document.getElementById('proficiency').value;
+      state.murfApiKey  = key;
+      state.targetLang  = lang;
+      state.voiceId     = vid;
+      state.proficiency = prof;
+      document.getElementById('langLabel').textContent = lang;
+      document.getElementById('levelBadge').textContent = '📊 ' + prof.charAt(0).toUpperCase() + prof.slice(1);
+      document.getElementById('configModal').classList.add('hidden');
+      document.getElementById('quickApiKey').value = key;
+      initApp();
+    }
+
+    function skipSetup() {
+      state.murfApiKey  = 'DEMO';
+      state.targetLang  = 'Spanish';
+      document.getElementById('configModal').classList.add('hidden');
+      initApp();
+    }
+
+    function saveQuickKey() {
+      state.murfApiKey = document.getElementById('quickApiKey').value.trim();
+      toast('API key saved ✓', 'success');
+    }
+
+    function initApp() {
+      addMessage('ai', `¡Hola! I'm your ${state.targetLang} language tutor. 👋<br><br>
+        I'll speak in English but weave in <strong>${state.targetLang}</strong> phrases so you can practice naturally.
+        You can type or use the microphone to talk with me.<br><br>
+        Let's start simple — say <strong>"Hello, how are you?"</strong> and I'll respond with the ${state.targetLang} equivalent!`,
+        null, true);
+      setupSpeechRecognition();
+      startSessionTimer();
+      drawIdleWave();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  MESSAGES
+    // ══════════════════════════════════════════════════════════════
+    function addMessage(role, html, translation = null, isWelcome = false) {
+      const wrap = document.getElementById('messages');
+      const div  = document.createElement('div');
+      div.className = `message ${role}`;
+
+      const avatarText = role === 'ai' ? 'AI' : 'ME';
+      const avatarCls  = role === 'ai' ? 'ai' : 'user';
+      const ts = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+
+      let transHtml = '';
+      if (translation) transHtml = `<div class="translation">📝 ${translation}</div>`;
+
+      div.innerHTML = `
+        <div class="avatar ${avatarCls}">${avatarText}</div>
+        <div class="bubble">
+          ${html}
+          ${transHtml}
+          <div class="bubble-meta">${ts}</div>
+        </div>`;
+      wrap.appendChild(div);
+      wrap.scrollTop = wrap.scrollHeight;
+    }
+
+    function addTyping() {
+      const wrap = document.getElementById('messages');
+      const div  = document.createElement('div');
+      div.className = 'message ai'; div.id = 'typingMsg';
+      div.innerHTML = `
+        <div class="avatar ai">AI</div>
+        <div class="bubble">
+          <div class="typing"><span></span><span></span><span></span></div>
+        </div>`;
+      wrap.appendChild(div);
+      wrap.scrollTop = wrap.scrollHeight;
+    }
+
+    function removeTyping() {
+      const el = document.getElementById('typingMsg');
+      if (el) el.remove();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  SEND MESSAGE FLOW
+    // ══════════════════════════════════════════════════════════════
+    async function sendMessage(text) {
+      const input = document.getElementById('userInput');
+      const msg   = (text || input.value).trim();
+      if (!msg) return;
+      input.value = '';
+
+      addMessage('user', msg);
+      state.history.push({ role: 'user', content: msg });
+      state.wordsHeard += msg.split(' ').length;
+      state.exchanges++;
+      updateStats();
+      setSessionBadge('ACTIVE');
+
+      addTyping();
+      document.getElementById('sendBtn').disabled = true;
+
+      try {
+        const reply = await getAIResponse(msg);
+        removeTyping();
+        const { responseText, translation, vocab } = parseReply(reply);
+        addMessage('ai', responseText, translation);
+        state.history.push({ role: 'assistant', content: reply });
+        if (vocab.length) addVocab(vocab);
+        state.streak++;
+        updateStats();
+
+        // Speak via Murf
+        if (state.murfApiKey && state.murfApiKey !== 'DEMO') {
+          await speakMurf(stripHtml(responseText));
+        } else {
+          speakBrowser(stripHtml(responseText));
+        }
+      } catch (err) {
+        removeTyping();
+        addMessage('ai', `⚠️ Error: ${err.message}. Check your API keys.`);
+      }
+
+      document.getElementById('sendBtn').disabled = false;
+      setSessionBadge('IDLE');
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  CLAUDE AI RESPONSE (via Anthropic API)
+    // ══════════════════════════════════════════════════════════════
+    async function getAIResponse(userMsg) {
+      const systemPrompt = `You are LinguaVoice, an expert ${state.targetLang} language tutor.
+Your role:
+- Respond conversationally in English, naturally weaving in ${state.targetLang} words and short phrases.
+- For each response, include a "TRANSLATION:" section at the end with the most important ${state.targetLang} phrase from your reply.
+- Include a "VOCAB:" section listing 1-2 key ${state.targetLang} words learned: format as VOCAB:word=meaning,word2=meaning2
+- Keep responses concise (2-4 sentences) and encouraging.
+- Adapt to ${state.proficiency} level.
+- Make it conversational and fun!
+- Bold any ${state.targetLang} words using **word** markdown style.
+
+Example response format:
+"That's great! In ${state.targetLang}, we say **Hola, ¿cómo estás?** which means Hello, how are you? Let's try using it in a sentence!
+TRANSLATION: Hola, ¿cómo estás? = Hello, how are you?
+VOCAB:hola=hello,estás=you are"`;
+
+      const messages = [
+        ...state.history.slice(-8),
+        { role: 'user', content: userMsg }
+      ];
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          system: systemPrompt,
+          messages
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      return data.content?.[0]?.text || 'I could not generate a response.';
+    }
+
+    function parseReply(raw) {
+      let responseText = raw;
+      let translation  = null;
+      const vocab      = [];
+
+      // Extract TRANSLATION:
+      const tMatch = raw.match(/TRANSLATION:\s*([^\n]+)/);
+      if (tMatch) {
+        translation  = tMatch[1].trim();
+        responseText = responseText.replace(/TRANSLATION:\s*[^\n]+/, '').trim();
+      }
+      // Extract VOCAB:
+      const vMatch = raw.match(/VOCAB:\s*([^\n]+)/);
+      if (vMatch) {
+        vMatch[1].split(',').forEach(pair => {
+          const [w, m] = pair.split('=');
+          if (w && m) vocab.push({ word: w.trim(), meaning: m.trim() });
+        });
+        responseText = responseText.replace(/VOCAB:\s*[^\n]+/, '').trim();
+      }
+      // Convert **word** to bold
+      responseText = responseText.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+      return { responseText, translation, vocab };
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  MURF FALCON TTS
+    // ══════════════════════════════════════════════════════════════
+    async function speakMurf(text) {
+      setOrbState('speaking');
+      setSessionBadge('SPEAKING');
+
+      try {
+        const res = await fetch('https://api.murf.ai/v1/speech/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'api-key': state.murfApiKey
+          },
+          body: JSON.stringify({
+            text: text.substring(0, 500), // Murf limit
+            voiceId: state.voiceId,
+            format: 'MP3',
+            sampleRate: 24000,
+            speed: 1.0,
+            pitch: 0,
+            style: 'Conversational'
+          })
+        });
+
+        if (!res.ok) throw new Error(`Murf API ${res.status}`);
+        const data = await res.json();
+
+        if (data.audioFile) {
+          const audio = new Audio(data.audioFile);
+          await new Promise((resolve) => {
+            audio.onended = resolve;
+            audio.onerror = resolve;
+            audio.play();
+            visualizeAudioElement(audio);
+          });
+        }
+      } catch (err) {
+        console.warn('Murf TTS failed, falling back to browser TTS:', err);
+        speakBrowser(text);
+      }
+
+      setOrbState('idle');
+      setSessionBadge('IDLE');
+    }
+
+    // Fallback: Browser TTS
+    function speakBrowser(text) {
+      if (!('speechSynthesis' in window)) return;
+      setOrbState('speaking');
+      setSessionBadge('SPEAKING');
+      const utt = new SpeechSynthesisUtterance(text.substring(0, 500));
+      utt.rate  = 0.95; utt.pitch = 1.05;
+      utt.onend = () => { setOrbState('idle'); setSessionBadge('IDLE'); };
+      speechSynthesis.speak(utt);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  SPEECH RECOGNITION (Mic)
+    // ══════════════════════════════════════════════════════════════
+    function setupSpeechRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) { toast('Speech recognition not supported in this browser', 'error'); return; }
+
+      const rec = new SpeechRecognition();
+      rec.continuous    = false;
+      rec.interimResults = true;
+      rec.lang          = 'en-US';
+
+      rec.onresult = (e) => {
+        const last  = e.results[e.results.length - 1];
+        const trans = last[0].transcript;
+        document.getElementById('userInput').value = trans;
+        if (last.isFinal) {
+          stopListening();
+          sendMessage(trans);
+        }
+      };
+      rec.onerror = (e) => {
+        stopListening();
+        if (e.error !== 'aborted') toast(`Mic error: ${e.error}`, 'error');
+      };
+      rec.onend = () => stopListening();
+
+      state.recognition = rec;
+    }
+
+    function toggleMic() {
+      if (state.isListening) stopListening();
+      else startListening();
+    }
+
+    async function startListening() {
+      if (!state.recognition) { setupSpeechRecognition(); if (!state.recognition) return; }
+      try {
+        state.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        startWaveformVisualizer(state.mediaStream);
+      } catch (e) { toast('Microphone access denied', 'error'); return; }
+
+      state.isListening = true;
+      state.recognition.start();
+      setOrbState('listening');
+      document.getElementById('micBtn').classList.add('active');
+      document.getElementById('micBtnText').textContent = 'Listening… (tap to stop)';
+      document.getElementById('orbLabel').textContent = 'Listening…';
+      document.getElementById('orbHint').textContent   = 'Speak clearly, I\'m recording';
+      setSessionBadge('LISTENING');
+    }
+
+    function stopListening() {
+      state.isListening = false;
+      if (state.recognition) { try { state.recognition.stop(); } catch(e){} }
+      if (state.mediaStream) { state.mediaStream.getTracks().forEach(t => t.stop()); state.mediaStream = null; }
+      setOrbState('idle');
+      document.getElementById('micBtn').classList.remove('active');
+      document.getElementById('micBtnText').textContent = 'Hold to Speak';
+      document.getElementById('orbLabel').textContent = 'Ready to Speak';
+      document.getElementById('orbHint').textContent   = 'Click orb or button to record';
+      setSessionBadge('IDLE');
+      drawIdleWave();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  WAVEFORM VISUALIZER
+    // ══════════════════════════════════════════════════════════════
+    function startWaveformVisualizer(stream) {
+      const canvas = document.getElementById('waveform');
+      const ctx    = canvas.getContext('2d');
+      canvas.width  = canvas.offsetWidth * devicePixelRatio;
+      canvas.height = canvas.offsetHeight * devicePixelRatio;
+
+      const ac  = new (window.AudioContext || window.webkitAudioContext)();
+      const src = ac.createMediaStreamSource(stream);
+      const an  = ac.createAnalyser();
+      an.fftSize = 256;
+      src.connect(an);
+      state.audioContext = ac; state.analyser = an;
+
+      function draw() {
+        state.waveAnimFrame = requestAnimationFrame(draw);
+        const buf = new Uint8Array(an.frequencyBinCount);
+        an.getByteTimeDomainData(buf);
+
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.lineWidth   = 2.5 * devicePixelRatio;
+        ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+        ctx.shadowBlur  = 10; ctx.shadowColor = 'rgba(0,229,160,0.6)';
+        ctx.beginPath();
+        const sliceW = canvas.width / buf.length;
+        let x = 0;
+        buf.forEach((v, i) => {
+          const y = (v / 128.0) * (canvas.height / 2);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          x += sliceW;
+        });
+        ctx.lineTo(canvas.width, canvas.height / 2);
+        ctx.stroke();
+      }
+      draw();
+    }
+
+    function visualizeAudioElement(audio) {
+      const canvas = document.getElementById('waveform');
+      const ctx    = canvas.getContext('2d');
+      canvas.width  = canvas.offsetWidth * devicePixelRatio;
+      canvas.height = canvas.offsetHeight * devicePixelRatio;
+      // Simple animated wave while playing
+      let t = 0;
+      function draw() {
+        if (audio.paused || audio.ended) { drawIdleWave(); return; }
+        state.waveAnimFrame = requestAnimationFrame(draw);
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.lineWidth   = 2.5 * devicePixelRatio;
+        ctx.strokeStyle = '#0077ff';
+        ctx.shadowBlur  = 10; ctx.shadowColor = 'rgba(0,119,255,0.6)';
+        ctx.beginPath();
+        for (let i = 0; i < canvas.width; i++) {
+          const y = (canvas.height/2) + Math.sin((i/canvas.width)*Math.PI*6 + t) * (canvas.height/3) * 0.6;
+          i===0 ? ctx.moveTo(i,y) : ctx.lineTo(i,y);
+        }
+        ctx.stroke(); t += 0.12;
+      }
+      draw();
+    }
+
+    function drawIdleWave() {
+      cancelAnimationFrame(state.waveAnimFrame);
+      const canvas = document.getElementById('waveform');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      canvas.width  = canvas.offsetWidth * devicePixelRatio || 300;
+      canvas.height = canvas.offsetHeight * devicePixelRatio || 60;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.lineWidth   = 1.5 * devicePixelRatio;
+      ctx.strokeStyle = 'rgba(90,102,120,0.4)';
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height/2);
+      ctx.lineTo(canvas.width, canvas.height/2);
+      ctx.stroke();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  VOCAB & STATS
+    // ══════════════════════════════════════════════════════════════
+    function addVocab(words) {
+      const list = document.getElementById('vocabList');
+      // Clear placeholder
+      if (state.vocab.length === 0) list.innerHTML = '';
+      words.forEach(({ word, meaning }) => {
+        if (state.vocab.find(v => v.word === word)) return;
+        state.vocab.push({ word, meaning });
+        const el = document.createElement('div');
+        el.className = 'vocab-item';
+        el.innerHTML = `<span class="vocab-word">${word}</span><span class="vocab-trans">${meaning}</span>`;
+        list.prepend(el);
+      });
+      document.getElementById('vocabCount').textContent = `${state.vocab.length} words`;
+    }
+
+    function updateStats() {
+      document.getElementById('statExchanges').textContent = state.exchanges;
+      document.getElementById('statWords').textContent     = state.wordsHeard;
+      document.getElementById('statStreak').textContent    = state.streak;
+    }
+
+    function startSessionTimer() {
+      setInterval(() => {
+        const mins = Math.floor((Date.now() - state.sessionStart) / 60000);
+        document.getElementById('statTime').textContent = `${mins}m`;
+      }, 10000);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  UI HELPERS
+    // ══════════════════════════════════════════════════════════════
+    function setOrbState(s) {
+      const orb = document.getElementById('orb');
+      orb.className = 'orb';
+      if (s === 'listening') { orb.classList.add('listening'); orb.textContent = '👂'; }
+      else if (s === 'speaking') { orb.classList.add('speaking'); orb.textContent = '🔊'; }
+      else orb.textContent = '🎙️';
+    }
+
+    function setSessionBadge(s) {
+      const badge = document.getElementById('sessionBadge');
+      badge.textContent = s;
+      badge.className   = 'session-badge';
+      if (s === 'IDLE') badge.classList.add('idle');
+    }
+
+    function stripHtml(html) { const d = document.createElement('div'); d.innerHTML = html; return d.textContent || ''; }
+
+    function toast(msg, type='success') {
+      const t = document.createElement('div');
+      t.className = `toast ${type}`; t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  BOOT
+    // ══════════════════════════════════════════════════════════════
+    window.addEventListener('load', () => {
+      drawIdleWave();
+    });
+  </script>
+</body>
+</html>
 
